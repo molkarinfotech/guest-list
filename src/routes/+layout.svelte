@@ -1,5 +1,6 @@
 <script>
 	import '../app.css';
+	import { page } from '$app/state';
 
 	let { data, form } = $props();
 
@@ -28,8 +29,8 @@
 	</header>
 
 	<nav class="tabs">
-		<a href="/" class="tab {$page.url.pathname === '/' ? 'active' : ''}">Guests</a>
-		<a href="/occasions" class="tab {$page.url.pathname === '/occasions' ? 'active' : ''}">Occasions</a>
+		<a href="/" class="tab {page.url.pathname === '/' ? 'active' : ''}">Guests</a>
+		<a href="/occasions" class="tab {page.url.pathname === '/occasions' ? 'active' : ''}">Occasions</a>
 	</nav>
 
 	<slot />

@@ -1,13 +1,14 @@
 <script>
 	import { getGuest, updateGuest, getTagsForGuest, createTag, deleteTag } from '$lib/db.js';
-
-	let id = $params.id;
+	import { page } from '$app/state';
 
 	let guest = $state(null);
 	let loading = $state(true);
 	let saving = $state(false);
 	let error = $state(null);
 	let success = $state(null);
+
+	let id = $derived(page.params.id);
 
 	let tagNames = $state('');
 	let tagOccasions = $state({});
