@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 
-	let { data, form } = $props();
+	let { data, form, children } = $props();
 
 	const Toast = $derived(form?.success ? {
 		type: 'success',
@@ -33,7 +33,7 @@
 		<a href="/occasions" class="tab {page.url.pathname === '/occasions' ? 'active' : ''}">Occasions</a>
 	</nav>
 
-	{@render slots.default()}
+	{@render children()}
 </div>
 
 {#if Toast}
