@@ -33,7 +33,7 @@
 		<a href="/occasions" class="tab {page.url.pathname === '/occasions' ? 'active' : ''}">Occasions</a>
 	</nav>
 
-	<slot />
+	{@render slots.default()}
 </div>
 
 {#if Toast}
