@@ -1,5 +1,6 @@
 <script>
-	import { createGuest } from '$lib/db.js';
+	import { createGuest, createTag } from '$lib/db.js';
+	import { goto } from '$app/navigation';
 
 	let form = $state({
 		name: '',
@@ -72,6 +73,7 @@
 			form = { name: '', family_name: '', email: '', phone: '' };
 			tagNames = '';
 			tagOccasions = {};
+			goto('/');
 		} catch (err) {
 			error = err.message;
 		} finally {
