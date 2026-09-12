@@ -1,6 +1,7 @@
 <script>
-	import { createGuest, createTag } from '$lib/db.js';
+	import { createGuest, createTag, supabase, getOccasions } from '$lib/db.js';
 	import { goto } from '$app/navigation';
+	import { DEFAULT_OCCASIONS } from '$lib/defaults.js';
 
 	let form = $state({
 		name: '',
@@ -11,38 +12,32 @@
 
 	let submitting = $state(false);
 	let error = $state(null);
-	let success = $state(null);
 
-	let tagNames = $state('');
-	let tagOccasions = $state({});
+	let selectedTags = $state([]);
+	let occasionList = $state([]);
 
-	const occasionOptions = [
-		{ name: "Son's Birthday", value: "son-birthday" },
-		{ name: 'Diwali', value: 'diwali' },
-		{ name: 'Christmas', value: 'christmas' },
-		{ name: 'Summer BBQ', value: 'summer-bbq' },
-		{ name: "Daughter's Birthday", value: "daughter-birthday" }
-	];
+	$effect(() => {
+		getOccasions()
+			.then(occs => {
+				occasionList = occs.length ? occs : DEFAULT_OCCASIONS;
+			})
+			.catch(() => {
+				occasionList = DEFAULT_OCCASIONS;
+			});
+	});
 
-	function addTagRow() {
-		const name = prompt('Tag name (e.g. "Close friends", "Son\'s classmates"):');
-		if (!name) return;
-
-		const occasion = prompt(`Occasion for "${name}" (or leave blank for no occasion):`);
-		if (occasion) {
-			tagOccasions = { ...tagOccasions, [name]: occasion };
+	function toggleOccasion(occasionName) {
+		if (selectedTags.includes(occasionName)) {
+			selectedTags = selectedTags.filter(n => n !== occasionName);
+		} else {
+			selectedTags = [...selectedTags, occasionName];
 		}
-
-		tagNames = tagNames ? `${tagNames},${name}` : name;
 	}
 
 	async function handleSubmit(e) {
 		e.preventDefault();
 		submitting = true;
 		error = null;
-		success = null;
-
-		const nameList = tagNames ? tagNames.split(',').map(s => s.trim()).filter(Boolean) : [];
 
 		const guestData = {
 			name: form.name.trim(),
@@ -52,27 +47,22 @@
 		};
 
 		try {
+			if (!supabase) throw new Error('Supabase not connected. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY env vars.');
+
 			const guestResult = await createGuest(guestData);
 			if (guestResult.error) throw new Error(guestResult.error.message);
 
 			const newGuest = guestResult.data;
 
-			for (const tagName of nameList) {
-				const occ = tagOccasions[tagName] || null;
+			for (const tagName of selectedTags) {
 				const tagResult = await createTag({
 					guest_id: newGuest.id,
 					name: tagName,
-					occasion_name: occ
+					occasion_name: tagName
 				});
-				if (tagResult.error) {
-					console.warn('Tag failed:', tagResult.error);
-				}
+				if (tagResult.error) console.warn('Tag failed:', tagResult.error);
 			}
 
-			success = `Guest "${newGuest.name}" added!`;
-			form = { name: '', family_name: '', email: '', phone: '' };
-			tagNames = '';
-			tagOccasions = {};
 			goto('/');
 		} catch (err) {
 			error = err.message;
@@ -92,79 +82,61 @@
 		<a href="/" class="btn btn-secondary">← Back to Guests</a>
 	</header>
 
+	{#if !supabase}
+		<div class="supabase-warning">
+			<strong>⚠️ Supabase not connected.</strong> Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> env vars to add guests.
+		</div>
+	{/if}
+
 	<form class="form" onsubmit={handleSubmit}>
 		<div class="form-grid">
 			<div class="field">
 				<label for="name">Full Name *</label>
-				<input
-					type="text"
-					id="name"
-					bind:value={form.name}
-					required
-					placeholder="e.g. Priya Sharma"
-				/>
+				<input type="text" id="name" bind:value={form.name} required placeholder="e.g. Priya Sharma" />
 			</div>
 			<div class="field">
 				<label for="family">Family Name (optional)</label>
-				<input
-					type="text"
-					id="family"
-					bind:value={form.family_name}
-					placeholder="e.g. Sharma (to group spouse/kids)"
-				/>
+				<input type="text" id="family" bind:value={form.family_name} placeholder="e.g. Sharma (to group spouse/kids)" />
 				<span class="hint">Used to link family members together</span>
 			</div>
 			<div class="field">
 				<label for="email">Email</label>
-				<input
-					type="email"
-					id="email"
-					bind:value={form.email}
-					placeholder="priya@example.com"
-				/>
+				<input type="email" id="email" bind:value={form.email} placeholder="priya@example.com" />
 			</div>
 			<div class="field">
 				<label for="phone">Phone</label>
-				<input
-					type="tel"
-					id="phone"
-					bind:value={form.phone}
-					placeholder="+91 98765 43210"
-				/>
+				<input type="tel" id="phone" bind:value={form.phone} placeholder="+91 98765 43210" />
 			</div>
 		</div>
 
 		<div class="section">
-			<div class="section-header">
-				<h3>Tags / Occasions</h3>
-				<button type="button" class="btn btn-secondary btn-sm" onclick={addTagRow}>
-					+ Add Tag
-				</button>
+			<h3>Tags / Occasions</h3>
+			<p class="hint">Click occasions to tag this guest</p>
+
+			<div class="occasion-chips">
+				{#each occasionList as occ}
+					<button
+						type="button"
+						class="occasion-chip"
+						class:selected={selectedTags.includes(occ.name)}
+						style="--chip-color: {occ.color || '#1a1a2e'}"
+						onclick={() => toggleOccasion(occ.name)}
+					>
+						{occ.name}
+					</button>
+				{/each}
 			</div>
-			{#if tagNames}
-				<div class="tag-list">
-					{#each tagNames.split(',') as tagName}
-						<span class="tag-preview">
+
+			{#if selectedTags.length > 0}
+				<div class="selected-tags">
+					{#each selectedTags as tagName}
+						<span class="selected-tag">
 							{tagName}
-							{#if tagOccasions[tagName]}
-								<span class="occasion-badge">{tagOccasions[tagName]}</span>
-							{/if}
-							<button
-							type="button"
-							class="tag-remove"
-							onclick={() => {
-								const updated = tagNames.split(',').filter(n => n !== tagName);
-								tagNames = updated.length ? updated.join(',') : '';
-								const newOcc = { ...tagOccasions };
-								delete newOcc[tagName];
-								tagOccasions = newOcc;
-							}}
-						>×</button>
-					</span>
+							<button type="button" class="tag-remove" onclick={() => toggleOccasion(tagName)}>×</button>
+						</span>
 					{/each}
 				</div>
 			{/if}
-			<p class="hint">Tags let you filter guests later (e.g. "Diwali friends", "Son's classmates")</p>
 		</div>
 
 		{#if error}
@@ -249,42 +221,57 @@
 		border-top: 1px solid #eee;
 	}
 
-	.section-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 12px;
-	}
-
-	.section-header h3 {
-		margin: 0;
+	.section h3 {
+		margin: 0 0 4px;
 		color: #1a1a2e;
 		font-size: 1.1rem;
 	}
 
-	.tag-list {
+	.occasion-chips {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 8px;
 		margin-bottom: 12px;
 	}
 
-	.tag-preview {
+	.occasion-chip {
+		padding: 8px 16px;
+		border-radius: 20px;
+		border: 2px solid var(--chip-color);
+		background: white;
+		color: var(--chip-color);
+		font-weight: 500;
+		cursor: pointer;
+		font-size: 0.9rem;
+		transition: all 0.2s;
+	}
+
+	.occasion-chip:hover {
+		background: var(--chip-color);
+		color: white;
+	}
+
+	.occasion-chip.selected {
+		background: var(--chip-color);
+		color: white;
+	}
+
+	.selected-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-top: 12px;
+	}
+
+	.selected-tag {
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
 		padding: 6px 12px;
-		background: #f0f0f0;
-		border-radius: 20px;
-		font-size: 0.9rem;
-	}
-
-	.occasion-badge {
 		background: #1a1a2e;
 		color: white;
-		padding: 2px 8px;
-		border-radius: 12px;
-		font-size: 0.75rem;
+		border-radius: 20px;
+		font-size: 0.9rem;
 	}
 
 	.tag-remove {
@@ -292,13 +279,13 @@
 		border: none;
 		cursor: pointer;
 		font-size: 1.1rem;
-		color: #888;
+		color: rgba(255,255,255,0.7);
 		padding: 0;
 		line-height: 1;
 	}
 
 	.tag-remove:hover {
-		color: #e74c3c;
+		color: white;
 	}
 
 	.form-error {
@@ -313,6 +300,23 @@
 	.form-actions {
 		display: flex;
 		justify-content: flex-end;
+	}
+
+	.supabase-warning {
+		background: #fff3cd;
+		border: 1px solid #ffc107;
+		color: #856404;
+		padding: 12px 16px;
+		border-radius: 8px;
+		margin-bottom: 16px;
+		font-size: 0.95rem;
+	}
+
+	.supabase-warning code {
+		background: #f0f0f0;
+		padding: 2px 6px;
+		border-radius: 4px;
+		font-family: monospace;
 	}
 
 	.btn {
